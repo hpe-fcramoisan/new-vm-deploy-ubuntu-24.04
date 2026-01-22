@@ -73,7 +73,6 @@ REQUIRED_PARAMS=(
     "IPV6_SUBNET"
     "DNS_SERVERS"
     "NTP_SERVERS"
-    "NETWORK_INTERFACE"
     "HOSTNAME"
 )
 
@@ -83,6 +82,60 @@ for param in "${REQUIRED_PARAMS[@]}"; do
         exit 1
     fi
 done
+
+#############################################
+# AUTO-DETECT NETWORK INTERFACE
+#############################################
+log_info "Auto-detecting network interface..."
+
+# Try to auto-detect the primary network interface
+# Method 1: Get interface with default route
+AUTO_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+
+# Method 2: If no default route, get first non-loopback interface with an IP
+if [[ -z "$AUTO_INTERFACE" ]]; then
+    AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | grep "UP" | awk '{print $1}' | head -n1)
+fi
+
+# Method 3: If still nothing, get any non-loopback interface
+if [[ -z "$AUTO_INTERFACE" ]]; then
+    AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | awk '{print $1}' | head -n1)
+fi
+
+# Check if NETWORK_INTERFACE was provided in config
+if [[ -n "${NETWORK_INTERFACE:-}" ]]; then
+    log_info "Using network interface from config: $NETWORK_INTERFACE"
+elif [[ -n "$AUTO_INTERFACE" ]]; then
+    log_info "Auto-detected network interface: $AUTO_INTERFACE"
+    NETWORK_INTERFACE="$AUTO_INTERFACE"
+else
+    log_warn "Could not auto-detect network interface"
+    log_info "Available interfaces:"
+    ip -br link show | grep -v "^lo" | awk '{print "  - "$1}'
+    echo ""
+    
+    # Prompt user to select interface
+    while true; do
+        read -p "Enter the network interface name to use: " NETWORK_INTERFACE
+        
+        # Verify the interface exists
+        if ip link show "$NETWORK_INTERFACE" &>/dev/null; then
+            log_info "Selected interface: $NETWORK_INTERFACE"
+            break
+        else
+            log_error "Interface '$NETWORK_INTERFACE' not found. Please try again."
+        fi
+    done
+fi
+
+# Final verification
+if ! ip link show "$NETWORK_INTERFACE" &>/dev/null; then
+    log_error "Network interface '$NETWORK_INTERFACE' does not exist"
+    exit 1
+fi
+
+log_info "Network interface confirmed: $NETWORK_INTERFACE"
+echo ""
 
 # Set defaults for optional parameters
 TIMEZONE="${TIMEZONE:-America/New_York}"

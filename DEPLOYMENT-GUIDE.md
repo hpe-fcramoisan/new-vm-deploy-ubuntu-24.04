@@ -22,7 +22,6 @@
 ## Pre-Deployment Checklist
 
 - [ ] Base Ubuntu 24.04 VM template ready
-- [ ] Network interface name identified (run `ip a` to check)
 - [ ] IP addresses allocated (both IPv4 and IPv6)
 - [ ] Gateway addresses confirmed
 - [ ] DNS server addresses available
@@ -31,6 +30,8 @@
 - [ ] Strong password ready (will be prompted during deployment)
 - [ ] Hostname chosen
 - [ ] Timezone determined
+
+**Note:** Network interface is auto-detected. Manual configuration only needed if auto-detection fails.
 
 ## Configuration Parameters Guide
 
@@ -41,7 +42,6 @@
 | `ADMIN_USER` | Administrative username | `hpn` |
 | `ADMIN_SSH_KEY` | Public SSH key for remote access | `ssh-rsa AAAA...` |
 | `HOSTNAME` | Unique VM hostname | `lab-vm-001` |
-| `NETWORK_INTERFACE` | Primary network interface | `ens18`, `eth0`, `ens33` |
 | `IPV4_ADDRESS` | IPv4 address | `192.168.1.100` |
 | `IPV4_SUBNET` | IPv4 subnet mask (CIDR) | `24` (for /24) |
 | `IPV4_GATEWAY` | IPv4 default gateway | `192.168.1.1` |
@@ -55,6 +55,7 @@
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `NETWORK_INTERFACE` | Auto-detected | Network interface name (e.g., `ens18`, `eth0`) |
 | `TIMEZONE` | `America/New_York` | System timezone |
 | `LOCALE` | `en_US.UTF-8` | System locale |
 | `KEYBOARD_LAYOUT` | `fr` | Keyboard layout |

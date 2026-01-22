@@ -34,7 +34,9 @@ nano my-vm.conf
 - DNS and NTP servers
 - Hostname
 
-**Note:** The admin password will be prompted securely during deployment (not stored in config file).
+**Note:** 
+- The admin password will be prompted securely during deployment (not stored in config file)
+- Network interface is auto-detected (can be overridden in config if needed)
 
 ### 3. Deploy VM
 ```bash
@@ -94,7 +96,8 @@ ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
 
 # Network
 HOSTNAME="lab-vm-001"
-NETWORK_INTERFACE="ens18"
+# NETWORK_INTERFACE auto-detected (uncomment to override)
+# NETWORK_INTERFACE="ens18"
 IPV4_ADDRESS="192.168.1.100"
 IPV4_SUBNET="24"
 IPV4_GATEWAY="192.168.1.1"

@@ -15,7 +15,9 @@ ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here"
 # NETWORK CONFIG
 #------------------
 HOSTNAME="lab-vm-001"
-NETWORK_INTERFACE="ens18"  # Common: eth0, ens18, ens33 - check with 'ip a'
+# NETWORK_INTERFACE will be auto-detected (usually ens18, eth0, ens33)
+# Uncomment and set manually if auto-detection fails:
+# NETWORK_INTERFACE="ens18"
 
 # IPv4 Configuration
 IPV4_ADDRESS="192.168.1.100"
