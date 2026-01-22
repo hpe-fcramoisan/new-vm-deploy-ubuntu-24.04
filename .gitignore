@@ -1,0 +1,7 @@
+# Ignore actual config files (contain sensitive data)
+config.conf
+*.conf
+!config.conf.template
+
+# macOS
+.DS_Store
