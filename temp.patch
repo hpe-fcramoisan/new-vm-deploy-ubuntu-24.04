@@ -1,0 +1,123 @@
+diff --git a/DEPLOYMENT-GUIDE.md b/DEPLOYMENT-GUIDE.md
+index b60c585..e44a4e4 100644
+--- a/DEPLOYMENT-GUIDE.md
++++ b/DEPLOYMENT-GUIDE.md
+@@ -28,7 +28,7 @@
+ - [ ] DNS server addresses available
+ - [ ] NTP server addresses available
+ - [ ] SSH public key ready for admin user
+-- [ ] Secure password generated for admin user
++- [ ] Strong password ready (will be prompted during deployment)
+ - [ ] Hostname chosen
+ - [ ] Timezone determined
+ 
+@@ -39,7 +39,6 @@
+ | Parameter | Description | Example |
+ |-----------|-------------|---------|
+ | `ADMIN_USER` | Administrative username | `hpn` |
+-| `ADMIN_PASSWORD` | Secure password for console login | Use strong password generator |
+ | `ADMIN_SSH_KEY` | Public SSH key for remote access | `ssh-rsa AAAA...` |
+ | `HOSTNAME` | Unique VM hostname | `lab-vm-001` |
+ | `NETWORK_INTERFACE` | Primary network interface | `ens18`, `eth0`, `ens33` |
+@@ -198,6 +197,8 @@ After deployment completes, verify the following:
+ - Root console login still works for emergency
+ 
+ ### Password Requirements
++- Password will be prompted securely during deployment (not stored in config file)
++- Minimum 8 characters required
+ - Generate strong, unique passwords for each VM
+ - Store passwords securely (password manager)
+ - Each VM should have a different password
+diff --git a/README.md b/README.md
+index 5c18344..64d02a8 100644
+--- a/README.md
++++ b/README.md
+@@ -29,12 +29,13 @@ nano my-vm.conf
+ 
+ **Required configuration:**
+ - Admin user credentials (username: hpn)
+-- Unique secure password
+ - SSH public key
+ - Network settings (IPv4 and IPv6)
+ - DNS and NTP servers
+ - Hostname
+ 
++**Note:** The admin password will be prompted securely during deployment (not stored in config file).
++
+ ### 3. Deploy VM
+ ```bash
+ # Run deployment script
+@@ -88,7 +89,7 @@ ssh hpn@<VM_IP>
+ ```bash
+ # Admin user
+ ADMIN_USER="hpn"
+-ADMIN_PASSWORD="YourSecurePassword123!"
++# Password will be prompted during deployment
+ ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+ 
+ # Network
+@@ -118,7 +119,8 @@ REBOOT_TIME="02:00"
+ - **Root**: Cannot SSH in (console works for emergencies)
+ 
+ ### Passwords
+-- Generate unique, strong passwords for each VM
++- Password is prompted securely during deployment (not stored in config file)
++- Generate unique, strong passwords for each VM (minimum 8 characters)
+ - Store securely in password manager
+ - Never reuse passwords across VMs
+ 
+diff --git a/config.conf.template b/config.conf.template
+index 425761c..d80df40 100644
+--- a/config.conf.template
++++ b/config.conf.template
+@@ -8,7 +8,7 @@
+ # ADMIN USER
+ #------------------
+ ADMIN_USER="hpn"
+-ADMIN_PASSWORD="ChangeMe!SecureP@ssw0rd"  # Change this to a unique secure password
++# Note: Password will be prompted during deployment for security
+ ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here"
+ 
+ #------------------
+diff --git a/vm-deploy.sh b/vm-deploy.sh
+index 0634955..2762ba7 100644
+--- a/vm-deploy.sh
++++ b/vm-deploy.sh
+@@ -64,7 +64,6 @@ source "$CONFIG_FILE"
+ # Validate required parameters
+ REQUIRED_PARAMS=(
+     "ADMIN_USER"
+-    "ADMIN_PASSWORD"
+     "ADMIN_SSH_KEY"
+     "IPV4_ADDRESS"
+     "IPV4_GATEWAY"
+@@ -91,6 +90,29 @@ LOCALE="${LOCALE:-en_US.UTF-8}"
+ KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-fr}"
+ REBOOT_TIME="${REBOOT_TIME:-02:00}"
+ 
++# Prompt for admin password
++log_info "Password configuration for user: $ADMIN_USER"
++echo ""
++while true; do
++    read -s -p "Enter password for $ADMIN_USER: " ADMIN_PASSWORD
++    echo ""
++    read -s -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
++    echo ""
++    
++    if [[ "$ADMIN_PASSWORD" == "$ADMIN_PASSWORD_CONFIRM" ]]; then
++        if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
++            log_error "Password must be at least 8 characters long"
++            continue
++        fi
++        log_info "Password accepted"
++        break
++    else
++        log_error "Passwords do not match. Please try again."
++    fi
++done
++unset ADMIN_PASSWORD_CONFIRM
++echo ""
++
+ # Backup original files
+ BACKUP_DIR="/root/deployment-backup-$(date +%Y%m%d-%H%M%S)"
+ mkdir -p "$BACKUP_DIR"

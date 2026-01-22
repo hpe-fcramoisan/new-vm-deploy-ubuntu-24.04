@@ -29,11 +29,12 @@ nano my-vm.conf
 
 **Required configuration:**
 - Admin user credentials (username: hpn)
-- Unique secure password
 - SSH public key
 - Network settings (IPv4 and IPv6)
 - DNS and NTP servers
 - Hostname
+
+**Note:** The admin password will be prompted securely during deployment (not stored in config file).
 
 ### 3. Deploy VM
 ```bash
@@ -88,7 +89,7 @@ ssh hpn@<VM_IP>
 ```bash
 # Admin user
 ADMIN_USER="hpn"
-ADMIN_PASSWORD="YourSecurePassword123!"
+# Password will be prompted during deployment
 ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
 
 # Network
@@ -118,7 +119,8 @@ REBOOT_TIME="02:00"
 - **Root**: Cannot SSH in (console works for emergencies)
 
 ### Passwords
-- Generate unique, strong passwords for each VM
+- Password is prompted securely during deployment (not stored in config file)
+- Generate unique, strong passwords for each VM (minimum 8 characters)
 - Store securely in password manager
 - Never reuse passwords across VMs
 

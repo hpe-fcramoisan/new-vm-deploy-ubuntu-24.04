@@ -8,7 +8,7 @@
 # ADMIN USER
 #------------------
 ADMIN_USER="hpn"
-ADMIN_PASSWORD="ChangeMe!SecureP@ssw0rd"  # Change this to a unique secure password
+# Note: Password will be prompted during deployment for security
 ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here"
 
 #------------------

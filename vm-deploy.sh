@@ -64,7 +64,6 @@ source "$CONFIG_FILE"
 # Validate required parameters
 REQUIRED_PARAMS=(
     "ADMIN_USER"
-    "ADMIN_PASSWORD"
     "ADMIN_SSH_KEY"
     "IPV4_ADDRESS"
     "IPV4_GATEWAY"
@@ -90,6 +89,29 @@ TIMEZONE="${TIMEZONE:-America/New_York}"
 LOCALE="${LOCALE:-en_US.UTF-8}"
 KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-fr}"
 REBOOT_TIME="${REBOOT_TIME:-02:00}"
+
+# Prompt for admin password
+log_info "Password configuration for user: $ADMIN_USER"
+echo ""
+while true; do
+    read -s -p "Enter password for $ADMIN_USER: " ADMIN_PASSWORD
+    echo ""
+    read -s -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
+    echo ""
+    
+    if [[ "$ADMIN_PASSWORD" == "$ADMIN_PASSWORD_CONFIRM" ]]; then
+        if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
+            log_error "Password must be at least 8 characters long"
+            continue
+        fi
+        log_info "Password accepted"
+        break
+    else
+        log_error "Passwords do not match. Please try again."
+    fi
+done
+unset ADMIN_PASSWORD_CONFIRM
+echo ""
 
 # Backup original files
 BACKUP_DIR="/root/deployment-backup-$(date +%Y%m%d-%H%M%S)"

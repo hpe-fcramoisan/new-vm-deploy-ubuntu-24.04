@@ -28,7 +28,7 @@
 - [ ] DNS server addresses available
 - [ ] NTP server addresses available
 - [ ] SSH public key ready for admin user
-- [ ] Secure password generated for admin user
+- [ ] Strong password ready (will be prompted during deployment)
 - [ ] Hostname chosen
 - [ ] Timezone determined
 
@@ -39,7 +39,6 @@
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `ADMIN_USER` | Administrative username | `hpn` |
-| `ADMIN_PASSWORD` | Secure password for console login | Use strong password generator |
 | `ADMIN_SSH_KEY` | Public SSH key for remote access | `ssh-rsa AAAA...` |
 | `HOSTNAME` | Unique VM hostname | `lab-vm-001` |
 | `NETWORK_INTERFACE` | Primary network interface | `ens18`, `eth0`, `ens33` |
@@ -198,6 +197,8 @@ After deployment completes, verify the following:
 - Root console login still works for emergency
 
 ### Password Requirements
+- Password will be prompted securely during deployment (not stored in config file)
+- Minimum 8 characters required
 - Generate strong, unique passwords for each VM
 - Store passwords securely (password manager)
 - Each VM should have a different password
