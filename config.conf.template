@@ -1,0 +1,46 @@
+########################################
+# VM Deployment Configuration
+########################################
+# Copy this file and customize for each VM deployment
+# Usage: ./vm-deploy.sh -c your-config.conf
+
+#------------------
+# ADMIN USER
+#------------------
+ADMIN_USER="hpn"
+ADMIN_PASSWORD="ChangeMe!SecureP@ssw0rd"  # Change this to a unique secure password
+ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here"
+
+#------------------
+# NETWORK CONFIG
+#------------------
+HOSTNAME="lab-vm-001"
+NETWORK_INTERFACE="ens18"  # Common: eth0, ens18, ens33 - check with 'ip a'
+
+# IPv4 Configuration
+IPV4_ADDRESS="192.168.1.100"
+IPV4_SUBNET="24"
+IPV4_GATEWAY="192.168.1.1"
+
+# IPv6 Configuration
+IPV6_ADDRESS="2001:db8::100"
+IPV6_SUBNET="64"
+IPV6_GATEWAY="2001:db8::1"
+
+# DNS Servers (space-separated, can include both IPv4 and IPv6)
+DNS_SERVERS="192.168.1.10 192.168.1.11"
+
+# NTP Servers (space-separated)
+NTP_SERVERS="192.168.1.10 192.168.1.11"
+
+#------------------
+# LOCALE & TIME
+#------------------
+TIMEZONE="America/New_York"      # Examples: Europe/Paris, America/Los_Angeles, UTC
+LOCALE="en_US.UTF-8"             # Examples: en_US.UTF-8, fr_FR.UTF-8
+KEYBOARD_LAYOUT="fr"             # Examples: us, fr, de, uk
+
+#------------------
+# AUTO-UPDATE
+#------------------
+REBOOT_TIME="02:00"              # Time for automatic reboots (24h format, local time)
