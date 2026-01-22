@@ -377,7 +377,8 @@ apt-get install -y \
     dnsutils \
     ca-certificates \
     gnupg \
-    lsb-release
+    lsb-release \
+    ifstat \
 
 log_info "Essential packages installed"
 

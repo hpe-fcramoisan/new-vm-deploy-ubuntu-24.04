@@ -20,25 +20,25 @@ HOSTNAME="lab-vm-001"
 # NETWORK_INTERFACE="ens18"
 
 # IPv4 Configuration
-IPV4_ADDRESS="192.168.1.100"
+IPV4_ADDRESS="10.5.0.x"
 IPV4_SUBNET="24"
-IPV4_GATEWAY="192.168.1.1"
+IPV4_GATEWAY="10.5.0.1"
 
 # IPv6 Configuration
-IPV6_ADDRESS="2001:db8::100"
+IPV6_ADDRESS="fd05::x"
 IPV6_SUBNET="64"
-IPV6_GATEWAY="2001:db8::1"
+IPV6_GATEWAY="fd05::1"
 
 # DNS Servers (space-separated, can include both IPv4 and IPv6)
-DNS_SERVERS="192.168.1.10 192.168.1.11"
+DNS_SERVERS="10.5.0.21 10.5.0.22"
 
 # NTP Servers (space-separated)
-NTP_SERVERS="192.168.1.10 192.168.1.11"
+NTP_SERVERS="10.5.0.21 10.5.0.22"
 
 #------------------
 # LOCALE & TIME
 #------------------
-TIMEZONE="America/New_York"      # Examples: Europe/Paris, America/Los_Angeles, UTC
+TIMEZONE="Europe/Paris"      # Examples: Europe/Paris, America/Los_Angeles, UTC
 LOCALE="en_US.UTF-8"             # Examples: en_US.UTF-8, fr_FR.UTF-8
 KEYBOARD_LAYOUT="fr"             # Examples: us, fr, de, uk
 
