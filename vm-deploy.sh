@@ -73,7 +73,7 @@ REQUIRED_PARAMS=(
     "IPV6_SUBNET"
     "DNS_SERVERS"
     "NTP_SERVERS"
-    "HOSTNAME"
+    "VM_HOSTNAME"
 )
 
 for param in "${REQUIRED_PARAMS[@]}"; do
@@ -83,14 +83,22 @@ for param in "${REQUIRED_PARAMS[@]}"; do
     fi
 done
 
+# Validate SSH key format
+if ! [[ "$ADMIN_SSH_KEY" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519|sk-ecdsa-sha2-nistp256)[[:space:]] ]]; then
+    log_error "ADMIN_SSH_KEY does not appear to be a valid SSH public key"
+    log_error "Expected format: ssh-rsa AAAA... or ssh-ed25519 AAAA... (etc.)"
+    exit 1
+fi
+log_info "SSH key format validated"
+
 #############################################
 # AUTO-DETECT NETWORK INTERFACE
 #############################################
 log_info "Auto-detecting network interface..."
 
 # Try to auto-detect the primary network interface
-# Method 1: Get interface with default route
-AUTO_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+# Method 1: Get interface with default route (using -o for consistent output format)
+AUTO_INTERFACE=$(ip -o route show default 2>/dev/null | grep -oP 'dev \K\S+' | head -n1)
 
 # Method 2: If no default route, get first non-loopback interface with an IP
 if [[ -z "$AUTO_INTERFACE" ]]; then
@@ -207,6 +215,7 @@ fi
 
 # Set password
 echo "$ADMIN_USER:$ADMIN_PASSWORD" | chpasswd
+unset ADMIN_PASSWORD
 log_info "Password set for $ADMIN_USER"
 
 # Add to sudo group with NOPASSWD
@@ -257,12 +266,15 @@ passwd -l root
 log_info "Root account locked for SSH (console access preserved)"
 
 #############################################
-# 5. SET HOSTNAME
+# 5. SET VM_HOSTNAME
 #############################################
-log_info "Step 5: Setting hostname to $HOSTNAME"
+log_info "Step 5: Setting hostname to $VM_HOSTNAME"
 
-hostnamectl set-hostname "$HOSTNAME"
-echo "127.0.1.1 $HOSTNAME" >> /etc/hosts
+hostnamectl set-hostname "$VM_HOSTNAME"
+# Add hostname to /etc/hosts only if not already present
+if ! grep -q "127.0.1.1.*$VM_HOSTNAME" /etc/hosts; then
+    echo "127.0.1.1 $VM_HOSTNAME" >> /etc/hosts
+fi
 log_info "Hostname configured"
 
 #############################################
@@ -294,8 +306,20 @@ log_info "Keyboard layout set to $KEYBOARD_LAYOUT"
 #############################################
 log_info "Step 7: Configuring network with netplan"
 
-# Backup existing netplan configs
+# Backup existing netplan configs and remove them to avoid conflicts
 cp -r /etc/netplan "$BACKUP_DIR/" 2>/dev/null || true
+for old_config in /etc/netplan/*.yaml /etc/netplan/*.yml; do
+    if [[ -f "$old_config" ]]; then
+        log_info "Removing existing netplan config: $old_config (backed up to $BACKUP_DIR)"
+        rm -f "$old_config"
+    fi
+done
+
+# Convert space-separated DNS servers to YAML list format
+DNS_YAML=""
+for dns in $DNS_SERVERS; do
+    DNS_YAML="${DNS_YAML}          - ${dns}"$'\n'
+done
 
 # Create netplan configuration
 cat > /etc/netplan/01-netcfg.yaml <<EOF
@@ -314,8 +338,7 @@ network:
           via: $IPV6_GATEWAY
       nameservers:
         addresses:
-          - $DNS_SERVERS
-      dhcp4: no
+${DNS_YAML}      dhcp4: no
       dhcp6: no
 EOF
 
@@ -381,6 +404,14 @@ apt-get install -y \
     ifstat \
 
 log_info "Essential packages installed"
+
+# Install additional packages if specified
+if [[ -n "${ADDITIONAL_PACKAGES:-}" ]]; then
+    log_info "Installing additional packages: $ADDITIONAL_PACKAGES"
+    # shellcheck disable=SC2086
+    apt-get install -y $ADDITIONAL_PACKAGES
+    log_info "Additional packages installed"
+fi
 
 #############################################
 # 11. CONFIGURE UNATTENDED UPGRADES
@@ -467,7 +498,7 @@ EOF
 for config in /etc/logrotate.d/*; do
     if [[ -f "$config" ]]; then
         # Backup original
-        cp "$config" "$BACKUP_DIR/logrotate-$(basename $config).bak"
+        cp "$config" "$BACKUP_DIR/logrotate-$(basename "$config").bak"
         # Set high rotation count
         sed -i 's/rotate [0-9]\+/rotate 999999/g' "$config"
     fi
@@ -528,9 +559,7 @@ apt-get autoremove -y
 apt-get autoclean -y
 apt-get clean
 
-# Clear old logs
-find /var/log -type f -name "*.gz" -delete 2>/dev/null || true
-find /var/log -type f -name "*.1" -delete 2>/dev/null || true
+# Note: Not clearing old logs - keeping all logs as configured in step 12
 
 # Clear bash history
 history -c
@@ -549,7 +578,7 @@ cat > /root/deployment-info.txt <<EOF
 VM Deployment Information
 ========================================
 Deployment Date: $(date)
-Hostname: $HOSTNAME
+Hostname: $VM_HOSTNAME
 Admin User: $ADMIN_USER
 Timezone: $TIMEZONE
 Locale: $LOCALE
@@ -569,6 +598,8 @@ Auto-Update Configuration:
   Auto-Reboot: Yes (at $REBOOT_TIME local time)
   Auto-Cleanup: Yes
 
+Additional Packages: ${ADDITIONAL_PACKAGES:-none}
+
 Security:
   SSH: Key-only authentication
   Root: Password login disabled (console only)
@@ -587,7 +618,7 @@ echo ""
 log_info "========================================="
 log_info "VM Deployment Complete!"
 log_info "========================================="
-log_info "Hostname: $HOSTNAME"
+log_info "Hostname: $VM_HOSTNAME"
 log_info "Admin user: $ADMIN_USER"
 log_info "SSH access: Key-only (password from console)"
 log_info "Auto-updates: Enabled with reboot at $REBOOT_TIME"

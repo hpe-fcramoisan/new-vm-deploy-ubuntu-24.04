@@ -14,7 +14,7 @@ ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here"
 #------------------
 # NETWORK CONFIG
 #------------------
-HOSTNAME="lab-vm-001"
+VM_HOSTNAME="lab-vm-001"
 # NETWORK_INTERFACE will be auto-detected (usually ens18, eth0, ens33)
 # Uncomment and set manually if auto-detection fails:
 # NETWORK_INTERFACE="ens18"
@@ -41,6 +41,13 @@ NTP_SERVERS="10.5.0.21 10.5.0.22"
 TIMEZONE="Europe/Paris"      # Examples: Europe/Paris, America/Los_Angeles, UTC
 LOCALE="en_US.UTF-8"             # Examples: en_US.UTF-8, fr_FR.UTF-8
 KEYBOARD_LAYOUT="fr"             # Examples: us, fr, de, uk
+
+#------------------
+# ADDITIONAL PACKAGES
+#------------------
+# Space-separated list of additional packages to install (optional)
+# Example: ADDITIONAL_PACKAGES="docker.io nginx postgresql-client"
+ADDITIONAL_PACKAGES=""
 
 #------------------
 # AUTO-UPDATE
