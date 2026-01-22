@@ -227,6 +227,10 @@ log_info "Sudo access configured with NOPASSWD"
 # Setup SSH key
 mkdir -p /home/$ADMIN_USER/.ssh
 chmod 700 /home/$ADMIN_USER/.ssh
+# Backup existing authorized_keys if present
+if [[ -f /home/$ADMIN_USER/.ssh/authorized_keys ]]; then
+    cp /home/$ADMIN_USER/.ssh/authorized_keys "$BACKUP_DIR/authorized_keys.bak"
+fi
 echo "$ADMIN_SSH_KEY" > /home/$ADMIN_USER/.ssh/authorized_keys
 chmod 600 /home/$ADMIN_USER/.ssh/authorized_keys
 chown -R $ADMIN_USER:$ADMIN_USER /home/$ADMIN_USER/.ssh
@@ -261,9 +265,13 @@ systemctl restart ssh
 #############################################
 log_info "Step 4: Locking root account for remote access"
 
-# Lock root password but keep it usable from console
-passwd -l root
-log_info "Root account locked for SSH (console access preserved)"
+# Lock root password but keep it usable from console (skip if already locked)
+if passwd -S root 2>/dev/null | grep -q ' L '; then
+    log_info "Root account already locked, skipping"
+else
+    passwd -l root
+    log_info "Root account locked for SSH (console access preserved)"
+fi
 
 #############################################
 # 5. SET VM_HOSTNAME
@@ -494,13 +502,14 @@ notifempty
 include /etc/logrotate.d
 EOF
 
-# Update common log rotation configs to never delete
+# Update common log rotation configs to never delete (skip already modified)
 for config in /etc/logrotate.d/*; do
     if [[ -f "$config" ]]; then
-        # Backup original
-        cp "$config" "$BACKUP_DIR/logrotate-$(basename "$config").bak"
-        # Set high rotation count
-        sed -i 's/rotate [0-9]\+/rotate 999999/g' "$config"
+        # Only backup and modify if not already set to 999999
+        if ! grep -q 'rotate 999999' "$config"; then
+            cp "$config" "$BACKUP_DIR/logrotate-$(basename "$config").bak"
+            sed -i 's/rotate [0-9]\+/rotate 999999/g' "$config"
+        fi
     fi
 done
 
@@ -573,6 +582,16 @@ log_info "Cleanup completed"
 #############################################
 log_info "Step 16: Creating deployment information file"
 
+# Keep deployment history with timestamps
+DEPLOYMENT_HISTORY_DIR="/root/deployment-history"
+mkdir -p "$DEPLOYMENT_HISTORY_DIR"
+if [[ -f /root/deployment-info.txt ]]; then
+    # Archive previous deployment info with timestamp
+    PREV_TIMESTAMP=$(date -r /root/deployment-info.txt +%Y%m%d-%H%M%S 2>/dev/null || date +%Y%m%d-%H%M%S)
+    cp /root/deployment-info.txt "$DEPLOYMENT_HISTORY_DIR/deployment-info-${PREV_TIMESTAMP}.txt"
+    log_info "Previous deployment info archived to $DEPLOYMENT_HISTORY_DIR"
+fi
+
 cat > /root/deployment-info.txt <<EOF
 ========================================
 VM Deployment Information
@@ -606,6 +625,7 @@ Security:
   Fail2ban: Enabled
 
 Backup Location: $BACKUP_DIR
+Deployment History: $DEPLOYMENT_HISTORY_DIR
 ========================================
 EOF
 
@@ -628,6 +648,7 @@ log_warn "Test connection: ssh $ADMIN_USER@$IPV4_ADDRESS"
 log_info ""
 log_info "Deployment details: /root/deployment-info.txt"
 log_info "Configuration backup: $BACKUP_DIR"
+log_info "Deployment history: $DEPLOYMENT_HISTORY_DIR"
 log_info "========================================="
 echo ""
 
