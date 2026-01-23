@@ -193,23 +193,92 @@ get_default_domain() {
     fi
 }
 
+# Add official nginx.org repository for latest nginx version
+add_nginx_repo() {
+    local keyring="/usr/share/keyrings/nginx-archive-keyring.gpg"
+    local sources_list="/etc/apt/sources.list.d/nginx.list"
+
+    if [[ -f "$sources_list" ]]; then
+        log_info "nginx.org repository already configured"
+        return 0
+    fi
+
+    log_step "Adding official nginx.org repository..."
+
+    # Install prerequisites
+    apt-get update
+    apt-get install -y ca-certificates curl gnupg
+
+    # Add nginx signing key
+    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o "$keyring"
+
+    # Add repository for Ubuntu (mainline branch for latest features)
+    local codename
+    codename=$(lsb_release -cs)
+    echo "deb [signed-by=$keyring] http://nginx.org/packages/mainline/ubuntu $codename nginx" > "$sources_list"
+
+    # Pin nginx.org packages to have higher priority than Ubuntu's
+    cat > /etc/apt/preferences.d/99nginx <<'EOF'
+Package: nginx*
+Pin: origin nginx.org
+Pin-Priority: 900
+EOF
+
+    apt-get update
+    log_info "nginx.org repository added (mainline branch)"
+}
+
 # Install nginx if not present
 install_nginx() {
     if command -v nginx &>/dev/null; then
-        log_info "nginx is already installed"
+        log_info "nginx is already installed (version: $(nginx -v 2>&1 | grep -oP 'nginx/\K[0-9.]+'))"
         return 0
     fi
 
     log_step "Installing nginx..."
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
+
+    # Add official nginx.org repo for latest version (1.26+)
+    add_nginx_repo
+
     apt-get install -y nginx
 
     # Enable and start nginx
     systemctl enable nginx
     systemctl start nginx
 
-    log_info "nginx installed successfully"
+    log_info "nginx installed successfully (version: $(nginx -v 2>&1 | grep -oP 'nginx/\K[0-9.]+'))"
+}
+
+# Check if nginx version supports "http2 on;" directive (1.25.1+)
+# Returns 0 (true) if supported, 1 (false) if not
+nginx_supports_http2_directive() {
+    local version_output
+    version_output=$(nginx -v 2>&1)
+
+    # Extract version number (e.g., "nginx/1.24.0" -> "1.24.0")
+    local version
+    version=$(echo "$version_output" | grep -oP 'nginx/\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    if [[ -z "$version" ]]; then
+        # Can't determine version, assume old syntax for safety
+        return 1
+    fi
+
+    # Split version into parts
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$version"
+
+    # http2 directive added in 1.25.1
+    if [[ "$major" -gt 1 ]]; then
+        return 0
+    elif [[ "$major" -eq 1 && "$minor" -gt 25 ]]; then
+        return 0
+    elif [[ "$major" -eq 1 && "$minor" -eq 25 && "$patch" -ge 1 ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Install acme.sh if not present
@@ -396,18 +465,29 @@ generate_site_config() {
 
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
+    # Detect nginx version for http2 syntax
+    local listen_directive http2_directive
+    if nginx_supports_http2_directive; then
+        # nginx 1.25.1+ uses separate http2 directive
+        listen_directive="listen 443 ssl${default_flag};"
+        http2_directive=$'\n    http2 on;'
+        log_info "Using nginx 1.25+ http2 syntax"
+    else
+        # nginx < 1.25.1 uses http2 in listen line
+        listen_directive="listen 443 ssl http2${default_flag};"
+        http2_directive=""
+        log_info "Using nginx 1.24 http2 syntax"
+    fi
+
     cat > "/etc/nginx/sites-available/${domain}.conf" <<EOF
 # ${domain} - Managed by reverse-proxy.sh
 # Backend: ${backend_proto}://${backend_host}:${backend_port}
 # Generated: ${timestamp}
 
 server {
-    listen 443 ssl${default_flag};
-    listen [::]:443 ssl${default_flag};
-    server_name ${domain};
-
-    # HTTP/2 (nginx 1.25+ compatible)
-    http2 on;
+    ${listen_directive}
+    ${listen_directive/443/[::]:443}
+    server_name ${domain};${http2_directive}
 
     # SSL Certificates (symlinks to acme.sh)
     ssl_certificate ${NGINX_SSL_DIR}/${domain}/fullchain.pem;
