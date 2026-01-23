@@ -3,5 +3,8 @@ config.conf
 *.conf
 !config.conf.template
 
+# Brainstorm/working notes
+.brainstorm/
+
 # macOS
 .DS_Store

@@ -53,3 +53,31 @@ ADDITIONAL_PACKAGES=""
 # AUTO-UPDATE
 #------------------
 REBOOT_TIME="02:00"              # Time for automatic reboots (24h format, local time)
+
+#------------------
+# NGINX REVERSE PROXY (for reverse-proxy.sh)
+#------------------
+# Azure DNS credentials for Let's Encrypt DNS-01 challenge
+# Create a Service Principal: az ad sp create-for-rbac --name "acme-dns" --role "DNS Zone Contributor" --scopes /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/dnszones/{zone}
+AZURE_TENANT_ID=""
+AZURE_CLIENT_ID=""
+AZURE_CLIENT_SECRET=""
+AZURE_SUBSCRIPTION_ID=""
+AZURE_DNS_ZONE=""               # e.g., "example.com"
+AZURE_DNS_RESOURCE_GROUP=""     # Resource group containing the DNS zone
+
+# Let's Encrypt settings
+ACME_EMAIL=""                   # Email for Let's Encrypt notifications
+ACME_USE_STAGING="false"        # Set to "true" for testing (avoids rate limits)
+
+# Proxy domains - one per line
+# Format: domain:backend_host:backend_port[:https]
+# First domain becomes the default server for HTTPS
+# Add :https suffix for HTTPS backends
+# Example:
+# NGINX_PROXY_DOMAINS="
+# app.example.com:localhost:3000
+# api.example.com:192.168.1.100:8080
+# secure.example.com:10.0.0.50:443:https
+# "
+NGINX_PROXY_DOMAINS=""

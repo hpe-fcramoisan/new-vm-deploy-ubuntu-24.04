@@ -5,10 +5,10 @@ Automated deployment system for secure, auto-updating Ubuntu 24.04 VMs in lab en
 ## Files Included
 
 - `vm-deploy.sh` - Main deployment script
+- `reverse-proxy.sh` - Nginx reverse proxy with Let's Encrypt SSL
 - `config.conf.template` - Configuration file template
 - `gather-info.sh` - Helper to identify network interfaces and system info
 - `verify-deployment.sh` - Post-deployment verification
-- `DEPLOYMENT-GUIDE.md` - Comprehensive documentation
 
 ## Quick Start
 
@@ -58,61 +58,33 @@ ssh hpn@<VM_IP>
 
 ## What Gets Configured
 
-### ✅ Security
+### Security
 - SSH key-only authentication (password from console only)
 - Root login disabled for SSH
 - Fail2ban installed and configured
 - Unnecessary services disabled
 
-### ✅ Auto-Maintenance
+### Auto-Maintenance
 - Automatic security updates
 - Auto-reboot at 2 AM (configurable)
 - Automatic cleanup of old packages/kernels
 - All logs retained (compressed)
 
-### ✅ Network
+### Network
 - Static IPv4 and IPv6 configuration
 - Custom DNS servers
 - Custom NTP servers
 - Configured via netplan
 
-### ✅ User Management
+### User Management
 - Old users removed
 - New admin user (hpn) with sudo NOPASSWD
 - SSH key configured
 
-### ✅ System Settings
+### System Settings
 - Timezone configured
 - Locale configured
 - Keyboard layout configured (French by default)
-
-## Configuration File Example
-
-```bash
-# Admin user
-ADMIN_USER="hpn"
-# Password will be prompted during deployment
-ADMIN_SSH_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
-
-# Network
-HOSTNAME="lab-vm-001"
-# NETWORK_INTERFACE auto-detected (uncomment to override)
-# NETWORK_INTERFACE="ens18"
-IPV4_ADDRESS="192.168.1.100"
-IPV4_SUBNET="24"
-IPV4_GATEWAY="192.168.1.1"
-IPV6_ADDRESS="2001:db8::100"
-IPV6_SUBNET="64"
-IPV6_GATEWAY="2001:db8::1"
-DNS_SERVERS="192.168.1.10 192.168.1.11"
-NTP_SERVERS="192.168.1.10 192.168.1.11"
-
-# Localization
-TIMEZONE="America/New_York"
-LOCALE="en_US.UTF-8"
-KEYBOARD_LAYOUT="fr"
-REBOOT_TIME="02:00"
-```
 
 ## Important Notes
 
@@ -136,6 +108,32 @@ REBOOT_TIME="02:00"
 - Security updates install automatically
 - System reboots automatically at 2 AM if needed
 - Old kernels and packages removed automatically
+
+## Nginx Reverse Proxy (Optional)
+
+After VM deployment, optionally set up nginx as a reverse proxy with auto-renewing Let's Encrypt certificates.
+
+### Prerequisites
+- Azure DNS zone for your domain (DNS-01 challenge)
+- Service Principal with "DNS Zone Contributor" role
+
+### Usage
+```bash
+# Initial setup
+sudo ./reverse-proxy.sh -c my-vm.conf
+
+# Management (after setup)
+sudo ./reverse-proxy.sh
+```
+
+### Features
+- Automatic SSL via acme.sh + Azure DNS
+- HTTP to HTTPS redirect
+- WebSocket support
+- Per-domain logging
+- Certificate auto-renewal with nginx reload
+
+See `config.conf.template` for configuration options.
 
 ## Troubleshooting
 
@@ -164,50 +162,9 @@ sudo netplan apply
 less DEPLOYMENT-GUIDE.md
 ```
 
-## Workflow
-
-### For Lab Setup
-
-1. **Create base template once:**
-   - Install Ubuntu 24.04
-   - Install common software needed by all VMs
-   - Create VM template/snapshot
-   - **Do not run deployment script on template**
-
-2. **For each new VM:**
-   - Clone/deploy from template
-   - Create unique configuration file
-   - Run `vm-deploy.sh`
-   - Verify with `verify-deployment.sh`
-   - Test SSH access
-
-3. **Maintenance:**
-   - Updates happen automatically
-   - Reboots happen automatically at 2 AM
-   - No manual intervention needed
-
-## Support
-
-For detailed information, see `DEPLOYMENT-GUIDE.md`
-
-## Security Checklist
-
-Before putting VM into production:
-- [ ] Unique password set
-- [ ] SSH key added
-- [ ] SSH access tested
-- [ ] Cannot SSH as root (verified)
-- [ ] Sudo works without password (verified)
-- [ ] Network connectivity verified (IPv4 and IPv6)
-- [ ] DNS resolution working
-- [ ] NTP synchronization active
-- [ ] Auto-updates enabled
-- [ ] Fail2ban running
-
 ## Files Created on VM
 
-After deployment, these files are created:
-
+After deployment (`vm-deploy.sh`):
 - `/root/deployment-info.txt` - Deployment summary
 - `/root/deployment-backup-<timestamp>/` - Backup of original configs
 - `/etc/sudoers.d/hpn` - Sudo configuration
@@ -217,6 +174,12 @@ After deployment, these files are created:
 - `/etc/apt/apt.conf.d/50unattended-upgrades` - Auto-update config
 - `/etc/fail2ban/jail.local` - Fail2ban configuration
 
-## License
+After reverse proxy setup (`reverse-proxy.sh`):
+- `/etc/nginx/sites-available/<domain>.conf` - Per-domain nginx config
+- `/etc/nginx/ssl/<domain>/` - Certificate symlinks
+- `/etc/nginx/backups/` - Config backups before changes
+- `/etc/nginx/.reverse-proxy-managed` - Setup marker file
+- `/root/.acme.sh/` - acme.sh installation and certificates
 
-Use freely for your lab environment.
+## License
+Use freely at your own risk
