@@ -115,11 +115,21 @@ ssh hpn@<VM_IP>
 
 ## Nginx Reverse Proxy (Optional)
 
-After VM deployment, optionally set up nginx as a reverse proxy with auto-renewing Let's Encrypt certificates.
+After VM deployment, optionally set up nginx as a reverse proxy with auto-renewing Let's Encrypt certificates. Supports Azure DNS and Cloudflare DNS for DNS-01 challenges.
 
 ### Prerequisites
-- Azure DNS zone for your domain (DNS-01 challenge)
+
+Set `DNS_PROVIDER` in your config file to choose your provider:
+
+**Azure DNS** (`DNS_PROVIDER="azure"`):
+- Azure DNS zone for your domain
 - Service Principal with "DNS Zone Contributor" role
+- Required config: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_DNS_ZONE`, `AZURE_DNS_RESOURCE_GROUP`
+
+**Cloudflare DNS** (`DNS_PROVIDER="cloudflare"`):
+- Cloudflare-managed domain
+- API Token with Zone:DNS:Edit permission (create at https://dash.cloudflare.com/profile/api-tokens)
+- Required config: `CF_TOKEN`. Optional: `CF_ACCOUNT_ID`, `CF_ZONE_ID`
 
 ### Usage
 ```bash
@@ -128,10 +138,13 @@ sudo ./reverse-proxy.sh -c my-vm.conf
 
 # Management (after setup)
 sudo ./reverse-proxy.sh
+
+# Show help
+sudo ./reverse-proxy.sh --help
 ```
 
 ### Features
-- Automatic SSL via acme.sh + Azure DNS
+- Automatic SSL via acme.sh + Azure/Cloudflare DNS
 - HTTP to HTTPS redirect
 - WebSocket support
 - Per-domain logging

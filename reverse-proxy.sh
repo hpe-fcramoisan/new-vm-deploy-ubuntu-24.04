@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# Nginx Reverse Proxy Setup with Let's Encrypt (acme.sh + Azure DNS)
+# Nginx Reverse Proxy Setup with Let's Encrypt (acme.sh + Azure/Cloudflare DNS)
 # Configures nginx as a reverse proxy with automatic SSL certificate management
 #
-# Usage: ./reverse-proxy.sh -c config.conf
+# Usage: ./reverse-proxy.sh -c config.conf [-h|--help]
 #
 
 set -euo pipefail
@@ -46,16 +46,53 @@ check_root() {
     fi
 }
 
+# Show usage/help
+show_help() {
+    cat <<EOF
+Usage: $0 [-c config.conf] [-h|--help]
+
+Nginx reverse proxy with automatic Let's Encrypt SSL certificates.
+
+Options:
+  -c config.conf    Config file for initial setup or management
+  -h, --help        Show this help message
+
+DNS Providers (set DNS_PROVIDER in config):
+  azure       Azure DNS — requires AZURE_TENANT_ID, AZURE_CLIENT_ID,
+              AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID, AZURE_DNS_ZONE,
+              AZURE_DNS_RESOURCE_GROUP
+  cloudflare  Cloudflare DNS — requires CF_TOKEN (API Token with
+              Zone:DNS:Edit permission). CF_ACCOUNT_ID and CF_ZONE_ID
+              are optional.
+
+Modes:
+  Initial setup:  $0 -c config.conf  (when no prior setup exists)
+  Management:     $0                  (interactive menu after setup)
+EOF
+    exit 0
+}
+
 # Parse command line arguments
 parse_args() {
     CONFIG_FILE=""
-    while getopts "c:" opt; do
+
+    # Check for --help before getopts (getopts doesn't handle long options)
+    for arg in "$@"; do
+        case "$arg" in
+            --help) show_help ;;
+        esac
+    done
+
+    while getopts "c:h" opt; do
         case $opt in
             c)
                 CONFIG_FILE="$OPTARG"
                 ;;
+            h)
+                show_help
+                ;;
             \?)
-                echo "Usage: $0 [-c config.conf]"
+                echo "Usage: $0 [-c config.conf] [-h|--help]"
                 exit 1
                 ;;
         esac
@@ -94,30 +131,46 @@ prompt_value() {
     eval "$var_name='$value'"
 }
 
-# Validate required Azure DNS parameters
-validate_azure_config() {
-    local missing=()
+# Validate required DNS provider parameters
+validate_dns_config() {
+    local provider="${DNS_PROVIDER:-azure}"
 
-    [[ -z "${AZURE_TENANT_ID:-}" ]] && missing+=("AZURE_TENANT_ID")
-    [[ -z "${AZURE_CLIENT_ID:-}" ]] && missing+=("AZURE_CLIENT_ID")
-    [[ -z "${AZURE_CLIENT_SECRET:-}" ]] && missing+=("AZURE_CLIENT_SECRET")
-    [[ -z "${AZURE_SUBSCRIPTION_ID:-}" ]] && missing+=("AZURE_SUBSCRIPTION_ID")
-    [[ -z "${AZURE_DNS_ZONE:-}" ]] && missing+=("AZURE_DNS_ZONE")
-    [[ -z "${AZURE_DNS_RESOURCE_GROUP:-}" ]] && missing+=("AZURE_DNS_RESOURCE_GROUP")
+    case "$provider" in
+        azure)
+            local missing=()
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        log_warn "Missing Azure DNS configuration. Please provide the following:"
-        for param in "${missing[@]}"; do
-            case $param in
-                AZURE_CLIENT_SECRET)
-                    prompt_value "$param" "  $param" true
-                    ;;
-                *)
-                    prompt_value "$param" "  $param"
-                    ;;
-            esac
-        done
-    fi
+            [[ -z "${AZURE_TENANT_ID:-}" ]] && missing+=("AZURE_TENANT_ID")
+            [[ -z "${AZURE_CLIENT_ID:-}" ]] && missing+=("AZURE_CLIENT_ID")
+            [[ -z "${AZURE_CLIENT_SECRET:-}" ]] && missing+=("AZURE_CLIENT_SECRET")
+            [[ -z "${AZURE_SUBSCRIPTION_ID:-}" ]] && missing+=("AZURE_SUBSCRIPTION_ID")
+            [[ -z "${AZURE_DNS_ZONE:-}" ]] && missing+=("AZURE_DNS_ZONE")
+            [[ -z "${AZURE_DNS_RESOURCE_GROUP:-}" ]] && missing+=("AZURE_DNS_RESOURCE_GROUP")
+
+            if [[ ${#missing[@]} -gt 0 ]]; then
+                log_warn "Missing Azure DNS configuration. Please provide the following:"
+                for param in "${missing[@]}"; do
+                    case $param in
+                        AZURE_CLIENT_SECRET)
+                            prompt_value "$param" "  $param" true
+                            ;;
+                        *)
+                            prompt_value "$param" "  $param"
+                            ;;
+                    esac
+                done
+            fi
+            ;;
+        cloudflare)
+            if [[ -z "${CF_TOKEN:-}" ]]; then
+                log_warn "Missing Cloudflare DNS configuration. Please provide the following:"
+                prompt_value "CF_TOKEN" "  CF_TOKEN (API Token with Zone:DNS:Edit)" true
+            fi
+            ;;
+        *)
+            log_error "Unknown DNS_PROVIDER: $provider (supported: azure, cloudflare)"
+            exit 1
+            ;;
+    esac
 
     # Validate ACME email
     if [[ -z "${ACME_EMAIL:-}" ]]; then
@@ -302,18 +355,28 @@ install_acme() {
     log_info "acme.sh installed successfully"
 }
 
-# Configure Azure DNS credentials for acme.sh
-configure_azure_dns() {
-    log_step "Configuring Azure DNS credentials for acme.sh..."
+# Configure DNS provider credentials for acme.sh
+configure_dns_credentials() {
+    local provider="${DNS_PROVIDER:-azure}"
 
-    # Export Azure credentials for acme.sh
-    export AZUREDNS_SUBSCRIPTIONID="$AZURE_SUBSCRIPTION_ID"
-    export AZUREDNS_TENANTID="$AZURE_TENANT_ID"
-    export AZUREDNS_APPID="$AZURE_CLIENT_ID"
-    export AZUREDNS_CLIENTSECRET="$AZURE_CLIENT_SECRET"
+    log_step "Configuring $provider DNS credentials for acme.sh..."
+
+    case "$provider" in
+        azure)
+            export AZUREDNS_SUBSCRIPTIONID="$AZURE_SUBSCRIPTION_ID"
+            export AZUREDNS_TENANTID="$AZURE_TENANT_ID"
+            export AZUREDNS_APPID="$AZURE_CLIENT_ID"
+            export AZUREDNS_CLIENTSECRET="$AZURE_CLIENT_SECRET"
+            ;;
+        cloudflare)
+            export CF_Token="$CF_TOKEN"
+            export CF_Account_ID="${CF_ACCOUNT_ID:-}"
+            export CF_Zone_ID="${CF_ZONE_ID:-}"
+            ;;
+    esac
 
     # acme.sh will save these to account.conf on first use
-    log_info "Azure DNS credentials configured"
+    log_info "$provider DNS credentials configured"
 }
 
 # Setup base nginx configuration
@@ -402,15 +465,16 @@ issue_certificate() {
         log_warn "Using Let's Encrypt STAGING server (certificates will not be trusted)"
     fi
 
-    # Export Azure credentials
-    export AZUREDNS_SUBSCRIPTIONID="$AZURE_SUBSCRIPTION_ID"
-    export AZUREDNS_TENANTID="$AZURE_TENANT_ID"
-    export AZUREDNS_APPID="$AZURE_CLIENT_ID"
-    export AZUREDNS_CLIENTSECRET="$AZURE_CLIENT_SECRET"
+    # Determine DNS plugin based on provider
+    local dns_plugin
+    case "${DNS_PROVIDER:-azure}" in
+        azure)      dns_plugin="dns_azure" ;;
+        cloudflare) dns_plugin="dns_cf" ;;
+    esac
 
     # Issue certificate
     "$ACME_HOME/acme.sh" --issue \
-        --dns dns_azure \
+        --dns "$dns_plugin" \
         -d "$domain" \
         --keylength ec-256 \
         --server "$acme_server" \
@@ -844,7 +908,7 @@ sync_with_config() {
     backup_nginx_config
 
     # Configure Azure DNS
-    configure_azure_dns
+    configure_dns_credentials
 
     # Remove domains
     for domain in "${to_remove[@]}"; do
@@ -955,8 +1019,8 @@ manual_add_domain() {
     backup_nginx_config
 
     # Configure Azure DNS if needed
-    validate_azure_config
-    configure_azure_dns
+    validate_dns_config
+    configure_dns_credentials
 
     # Determine if this should be default
     local is_default="false"
@@ -1212,7 +1276,7 @@ initial_setup() {
     echo ""
 
     # Validate Azure config
-    validate_azure_config
+    validate_dns_config
 
     # Parse domains
     if ! parse_domains; then
@@ -1242,7 +1306,7 @@ initial_setup() {
     install_acme
 
     # Configure Azure DNS
-    configure_azure_dns
+    configure_dns_credentials
 
     # Setup nginx
     setup_nginx_base
