@@ -140,7 +140,7 @@ if [[ "$MINIMAL_MODE" != true ]]; then
 
         # Prompt user to select interface
         while true; do
-            read -p "Enter the network interface name to use: " NETWORK_INTERFACE
+            read -r -p "Enter the network interface name to use: " NETWORK_INTERFACE
 
             # Verify the interface exists
             if ip link show "$NETWORK_INTERFACE" &>/dev/null; then
@@ -175,9 +175,9 @@ REBOOT_TIME="${REBOOT_TIME:-02:00}"
 log_info "Password configuration for user: $ADMIN_USER"
 echo ""
 while true; do
-    read -s -p "Enter password for $ADMIN_USER: " ADMIN_PASSWORD
+    read -rs -p "Enter password for $ADMIN_USER: " ADMIN_PASSWORD
     echo ""
-    read -s -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
+    read -rs -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
     echo ""
     
     if [[ "$ADMIN_PASSWORD" == "$ADMIN_PASSWORD_CONFIRM" ]]; then
@@ -250,20 +250,20 @@ log_info "Password set for $ADMIN_USER"
 
 # Add to sudo group with NOPASSWD
 usermod -aG sudo "$ADMIN_USER"
-echo "$ADMIN_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$ADMIN_USER
-chmod 0440 /etc/sudoers.d/$ADMIN_USER
+echo "$ADMIN_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$ADMIN_USER"
+chmod 0440 "/etc/sudoers.d/$ADMIN_USER"
 log_info "Sudo access configured with NOPASSWD"
 
 # Setup SSH key
-mkdir -p /home/$ADMIN_USER/.ssh
-chmod 700 /home/$ADMIN_USER/.ssh
+mkdir -p "/home/$ADMIN_USER/.ssh"
+chmod 700 "/home/$ADMIN_USER/.ssh"
 # Backup existing authorized_keys if present
-if [[ -f /home/$ADMIN_USER/.ssh/authorized_keys ]]; then
-    cp /home/$ADMIN_USER/.ssh/authorized_keys "$BACKUP_DIR/authorized_keys.bak"
+if [[ -f "/home/$ADMIN_USER/.ssh/authorized_keys" ]]; then
+    cp "/home/$ADMIN_USER/.ssh/authorized_keys" "$BACKUP_DIR/authorized_keys.bak"
 fi
-echo "$ADMIN_SSH_KEY" > /home/$ADMIN_USER/.ssh/authorized_keys
-chmod 600 /home/$ADMIN_USER/.ssh/authorized_keys
-chown -R $ADMIN_USER:$ADMIN_USER /home/$ADMIN_USER/.ssh
+echo "$ADMIN_SSH_KEY" > "/home/$ADMIN_USER/.ssh/authorized_keys"
+chmod 600 "/home/$ADMIN_USER/.ssh/authorized_keys"
+chown -R "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
 log_info "SSH key configured"
 
 #############################################
@@ -608,8 +608,8 @@ apt-get clean
 
 # Clear bash history
 history -c
-> /home/$ADMIN_USER/.bash_history
-> /root/.bash_history
+true > "/home/$ADMIN_USER/.bash_history"
+true > /root/.bash_history
 
 log_info "Cleanup completed"
 

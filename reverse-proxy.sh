@@ -13,7 +13,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Constants
@@ -122,10 +121,10 @@ prompt_value() {
     fi
 
     if [[ "$is_secret" == "true" ]]; then
-        read -s -p "$prompt_text: " value
+        read -rs -p "$prompt_text: " value
         echo ""
     else
-        read -p "$prompt_text: " value
+        read -r -p "$prompt_text: " value
     fi
 
     eval "$var_name='$value'"
@@ -229,10 +228,12 @@ get_deployed_domains() {
         [[ "$(basename "$conf")" == "00-default-redirect.conf" ]] && continue
 
         # Extract domain from filename
-        local domain=$(basename "$conf" .conf)
+        local domain
+        domain=$(basename "$conf" .conf)
 
         # Extract backend from config file comment
-        local backend=$(grep -m1 "^# Backend:" "$conf" 2>/dev/null | sed 's/# Backend: //' || echo "unknown")
+        local backend
+        backend=$(grep -m1 "^# Backend:" "$conf" 2>/dev/null | sed 's/# Backend: //' || echo "unknown")
 
         DEPLOYED_DOMAINS+=("$domain")
         DEPLOYED_BACKENDS+=("$backend")
@@ -473,14 +474,12 @@ issue_certificate() {
     esac
 
     # Issue certificate
-    "$ACME_HOME/acme.sh" --issue \
+    if ! "$ACME_HOME/acme.sh" --issue \
         --dns "$dns_plugin" \
         -d "$domain" \
         --keylength ec-256 \
         --server "$acme_server" \
-        --dnssleep 30
-
-    if [[ $? -ne 0 ]]; then
+        --dnssleep 30; then
         log_error "Failed to issue certificate for $domain"
         return 1
     fi
@@ -527,7 +526,8 @@ generate_site_config() {
         default_flag=" default_server"
     fi
 
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Detect nginx version for http2 syntax
     local listen_directive http2_directive
@@ -645,7 +645,8 @@ reload_nginx() {
 
 # Backup nginx configuration before changes
 backup_nginx_config() {
-    local backup_dir="/etc/nginx/backups/backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_dir
+    backup_dir="/etc/nginx/backups/backup-$(date +%Y%m%d-%H%M%S)"
 
     log_step "Creating backup of nginx configuration..."
 
@@ -705,7 +706,7 @@ remove_domain() {
     rm -f "/etc/nginx/sites-available/${domain}.conf"
 
     # Remove cert symlinks
-    rm -rf "$NGINX_SSL_DIR/$domain"
+    rm -rf "${NGINX_SSL_DIR:?}/${domain:?}"
 
     # Note: We don't revoke or remove the actual certificate from acme.sh
     # It will be kept for potential future use
@@ -898,7 +899,7 @@ sync_with_config() {
     fi
 
     echo ""
-    read -p "Proceed with sync? [y/N] " confirm
+    read -r -p "Proceed with sync? [y/N] " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         log_info "Sync cancelled"
         return 0
@@ -916,7 +917,8 @@ sync_with_config() {
     done
 
     # Add domains - track if we've set a default
-    local default_domain=$(get_default_domain)
+    local default_domain
+    default_domain=$(get_default_domain)
     local first_add=true
     for i in "${to_add[@]}"; do
         local is_default="false"
@@ -955,10 +957,14 @@ show_cert_status() {
     for domain in "${DEPLOYED_DOMAINS[@]}"; do
         local cert_file="$NGINX_SSL_DIR/$domain/fullchain.pem"
         if [[ -f "$cert_file" ]]; then
-            local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
-            local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || echo 0)
-            local now_epoch=$(date +%s)
-            local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+            local expiry
+            expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+            local expiry_epoch
+            expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || echo 0)
+            local now_epoch
+            now_epoch=$(date +%s)
+            local days_left
+            days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
 
             if [[ $days_left -lt 0 ]]; then
                 echo -e "  ${RED}$domain${NC}: EXPIRED ($expiry)"
@@ -977,7 +983,7 @@ show_cert_status() {
 # Manual add domain (interactive)
 manual_add_domain() {
     echo ""
-    read -p "Domain name (e.g., app.example.com): " domain
+    read -r -p "Domain name (e.g., app.example.com): " domain
 
     if [[ -z "$domain" ]]; then
         log_error "Domain name required"
@@ -993,9 +999,9 @@ manual_add_domain() {
         fi
     done
 
-    read -p "Backend host (e.g., localhost, 192.168.1.100): " backend_host
-    read -p "Backend port (e.g., 3000, 8080): " backend_port
-    read -p "Backend protocol [http/https] (default: http): " backend_proto
+    read -r -p "Backend host (e.g., localhost, 192.168.1.100): " backend_host
+    read -r -p "Backend port (e.g., 3000, 8080): " backend_port
+    read -r -p "Backend protocol [http/https] (default: http): " backend_proto
     backend_proto="${backend_proto:-http}"
 
     if [[ -z "$backend_host" || -z "$backend_port" ]]; then
@@ -1008,7 +1014,7 @@ manual_add_domain() {
     echo "  Domain: $domain"
     echo "  Backend: ${backend_proto}://${backend_host}:${backend_port}"
     echo ""
-    read -p "Proceed? [y/N] " confirm
+    read -r -p "Proceed? [y/N] " confirm
 
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         log_info "Cancelled"
@@ -1036,7 +1042,8 @@ manual_add_domain() {
 
             # Update marker file if this is the default
             if [[ "$is_default" == "true" ]]; then
-                local config_path=$(grep "^SETUP_CONFIG=" "$MARKER_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
+                local config_path
+                config_path=$(grep "^SETUP_CONFIG=" "$MARKER_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
                 create_marker_file "$config_path" "$domain"
             fi
         else
@@ -1058,7 +1065,8 @@ manual_remove_domain() {
         return 0
     fi
 
-    local default_domain=$(get_default_domain)
+    local default_domain
+    default_domain=$(get_default_domain)
 
     echo ""
     echo "Deployed domains:"
@@ -1072,7 +1080,7 @@ manual_remove_domain() {
     done
     echo ""
 
-    read -p "Enter number to remove (or 0 to cancel): " choice
+    read -r -p "Enter number to remove (or 0 to cancel): " choice
 
     if [[ "$choice" == "0" || -z "$choice" ]]; then
         return 0
@@ -1093,7 +1101,7 @@ manual_remove_domain() {
         return 1
     fi
 
-    read -p "Remove $domain? [y/N] " confirm
+    read -r -p "Remove $domain? [y/N] " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         return 0
     fi
@@ -1156,7 +1164,8 @@ show_manual_menu() {
         echo "========================================================"
 
         get_deployed_domains
-        local default_domain=$(get_default_domain)
+        local default_domain
+        default_domain=$(get_default_domain)
 
         if [[ ${#DEPLOYED_DOMAINS[@]} -eq 0 ]]; then
             echo "  No domains currently configured"
@@ -1179,16 +1188,16 @@ show_manual_menu() {
         echo "  [B] Back to main menu"
         echo ""
         echo "========================================================"
-        read -p "  Select option: " choice
+        read -r -p "  Select option: " choice
 
         case "${choice^^}" in
             A)
                 manual_add_domain
-                read -p "Press Enter to continue..."
+                read -r -p "Press Enter to continue..."
                 ;;
             R)
                 manual_remove_domain
-                read -p "Press Enter to continue..."
+                read -r -p "Press Enter to continue..."
                 ;;
             B)
                 return
@@ -1212,7 +1221,8 @@ management_mode() {
         has_config="true"
     else
         # Try config from marker file
-        local saved_config=$(grep "^SETUP_CONFIG=" "$MARKER_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
+        local saved_config
+        saved_config=$(grep "^SETUP_CONFIG=" "$MARKER_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
         if [[ -n "$saved_config" && -f "$saved_config" ]]; then
             load_config "$saved_config"
             config_path="$saved_config"
@@ -1222,13 +1232,13 @@ management_mode() {
 
     while true; do
         show_main_menu "$config_path" "$has_config"
-        read -p "  Select option: " choice
+        read -r -p "  Select option: " choice
 
         case "${choice^^}" in
             S)
                 if [[ "$has_config" == "true" ]]; then
                     sync_with_config "$config_path"
-                    read -p "Press Enter to continue..."
+                    read -r -p "Press Enter to continue..."
                 else
                     log_warn "No config file available for sync"
                     sleep 2
@@ -1238,7 +1248,7 @@ management_mode() {
                 if [[ "$has_config" == "true" ]]; then
                     echo ""
                     show_cert_status
-                    read -p "Press Enter to continue..."
+                    read -r -p "Press Enter to continue..."
                 else
                     log_warn "No config file available for comparison"
                     sleep 2
@@ -1249,11 +1259,11 @@ management_mode() {
                 ;;
             L)
                 show_cert_status
-                read -p "Press Enter to continue..."
+                read -r -p "Press Enter to continue..."
                 ;;
             T)
                 test_nginx_config
-                read -p "Press Enter to continue..."
+                read -r -p "Press Enter to continue..."
                 ;;
             Q)
                 echo ""
@@ -1394,7 +1404,7 @@ else
     if [[ -z "$CONFIG_FILE" ]]; then
         log_warn "No config file specified. You will be prompted for all values."
         echo ""
-        read -p "Continue with interactive setup? [y/N] " confirm
+        read -r -p "Continue with interactive setup? [y/N] " confirm
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
             echo "Usage: $0 -c config.conf"
             exit 0
