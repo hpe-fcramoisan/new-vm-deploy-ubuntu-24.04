@@ -206,13 +206,22 @@ log_info "Step 1: Removing existing users (except system users)"
 
 # Get list of users with UID >= 1000 (regular users)
 USERS_TO_REMOVE=$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1}' /etc/passwd)
+CURRENT_LOGIN_USER="${SUDO_USER:-}"
+DEFERRED_USER=""
 
 for user in $USERS_TO_REMOVE; do
     if [[ "$user" == "$ADMIN_USER" ]]; then
         log_warn "Skipping removal of $user (target admin user)"
         continue
     fi
-    
+
+    # Defer removal of the user who invoked sudo to avoid killing our own session
+    if [[ -n "$CURRENT_LOGIN_USER" && "$user" == "$CURRENT_LOGIN_USER" ]]; then
+        log_warn "Deferring removal of $user (current login user)"
+        DEFERRED_USER="$user"
+        continue
+    fi
+
     log_info "Removing user: $user"
     # Kill all processes owned by user
     pkill -u "$user" || true
@@ -220,6 +229,7 @@ for user in $USERS_TO_REMOVE; do
     # Remove user and home directory
     userdel -r "$user" 2>/dev/null || log_warn "Could not fully remove $user"
 done
+
 
 #############################################
 # 2. CREATE ADMIN USER
@@ -702,6 +712,12 @@ systemctl is-active fail2ban && log_info "✓ Fail2ban active" || log_error "✗
 systemctl is-active ssh && log_info "✓ SSH active" || log_error "✗ SSH not active"
 id "$ADMIN_USER" &>/dev/null && log_info "✓ Admin user exists" || log_error "✗ Admin user missing"
 [[ -f "/home/$ADMIN_USER/.ssh/authorized_keys" ]] && log_info "✓ SSH key configured" || log_error "✗ SSH key missing"
+
+# Remove deferred login user as the very last action to keep the session alive throughout deployment
+if [[ -n "$DEFERRED_USER" ]]; then
+    log_info "Removing deferred user: $DEFERRED_USER (skipping process kill to preserve current session)"
+    userdel -r "$DEFERRED_USER" 2>/dev/null || log_warn "Could not fully remove $DEFERRED_USER — processes still running. User will be removed after logout."
+fi
 
 echo ""
 log_info "Deployment script completed successfully!"
