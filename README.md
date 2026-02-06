@@ -81,6 +81,7 @@ ssh hpn@<VM_IP>
 
 ### User Management
 - Old users removed
+- If the current login user (the one who ran `sudo`) is being removed, their deletion is deferred to the very end of the script to keep the session alive
 - New admin user (hpn) with sudo NOPASSWD
 - SSH key configured
 
