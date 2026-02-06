@@ -3,7 +3,7 @@
 # Ubuntu 24.04 VM Deployment Script
 # Configures a secure, auto-updating VM from base template
 #
-# Usage: ./vm-deploy.sh -c config.conf
+# Usage: ./vm-deploy.sh -c config.conf [--minimal]
 #
 
 set -euo pipefail
@@ -35,20 +35,30 @@ fi
 
 # Parse command line arguments
 CONFIG_FILE=""
-while getopts "c:" opt; do
-    case $opt in
-        c)
-            CONFIG_FILE="$OPTARG"
+MINIMAL_MODE=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -c)
+            if [[ -z "${2:-}" ]]; then
+                log_error "Option -c requires an argument"
+                exit 1
+            fi
+            CONFIG_FILE="$2"
+            shift 2
             ;;
-        \?)
-            echo "Usage: $0 -c config.conf"
+        --minimal)
+            MINIMAL_MODE=true
+            shift
+            ;;
+        *)
+            echo "Usage: $0 -c config.conf [--minimal]"
             exit 1
             ;;
     esac
 done
 
 if [[ -z "$CONFIG_FILE" ]]; then
-    log_error "Configuration file required. Usage: $0 -c config.conf"
+    log_error "Configuration file required. Usage: $0 -c config.conf [--minimal]"
     exit 1
 fi
 
@@ -65,16 +75,21 @@ source "$CONFIG_FILE"
 REQUIRED_PARAMS=(
     "ADMIN_USER"
     "ADMIN_SSH_KEY"
-    "IPV4_ADDRESS"
-    "IPV4_GATEWAY"
-    "IPV4_SUBNET"
-    "IPV6_ADDRESS"
-    "IPV6_GATEWAY"
-    "IPV6_SUBNET"
-    "DNS_SERVERS"
-    "NTP_SERVERS"
     "VM_HOSTNAME"
 )
+
+if [[ "$MINIMAL_MODE" != true ]]; then
+    REQUIRED_PARAMS+=(
+        "IPV4_ADDRESS"
+        "IPV4_GATEWAY"
+        "IPV4_SUBNET"
+        "IPV6_ADDRESS"
+        "IPV6_GATEWAY"
+        "IPV6_SUBNET"
+        "DNS_SERVERS"
+        "NTP_SERVERS"
+    )
+fi
 
 for param in "${REQUIRED_PARAMS[@]}"; do
     if [[ -z "${!param:-}" ]]; then
@@ -91,64 +106,69 @@ if ! [[ "$ADMIN_SSH_KEY" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2
 fi
 log_info "SSH key format validated"
 
-#############################################
-# AUTO-DETECT NETWORK INTERFACE
-#############################################
-log_info "Auto-detecting network interface..."
+if [[ "$MINIMAL_MODE" != true ]]; then
+    #############################################
+    # AUTO-DETECT NETWORK INTERFACE
+    #############################################
+    log_info "Auto-detecting network interface..."
 
-# Try to auto-detect the primary network interface
-# Method 1: Get interface with default route (using -o for consistent output format)
-AUTO_INTERFACE=$(ip -o route show default 2>/dev/null | grep -oP 'dev \K\S+' | head -n1)
+    # Try to auto-detect the primary network interface
+    # Method 1: Get interface with default route (using -o for consistent output format)
+    AUTO_INTERFACE=$(ip -o route show default 2>/dev/null | grep -oP 'dev \K\S+' | head -n1)
 
-# Method 2: If no default route, get first non-loopback interface with an IP
-if [[ -z "$AUTO_INTERFACE" ]]; then
-    AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | grep "UP" | awk '{print $1}' | head -n1)
-fi
+    # Method 2: If no default route, get first non-loopback interface with an IP
+    if [[ -z "$AUTO_INTERFACE" ]]; then
+        AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | grep "UP" | awk '{print $1}' | head -n1)
+    fi
 
-# Method 3: If still nothing, get any non-loopback interface
-if [[ -z "$AUTO_INTERFACE" ]]; then
-    AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | awk '{print $1}' | head -n1)
-fi
+    # Method 3: If still nothing, get any non-loopback interface
+    if [[ -z "$AUTO_INTERFACE" ]]; then
+        AUTO_INTERFACE=$(ip -br link show | grep -v "^lo" | awk '{print $1}' | head -n1)
+    fi
 
-# Check if NETWORK_INTERFACE was provided in config
-if [[ -n "${NETWORK_INTERFACE:-}" ]]; then
-    log_info "Using network interface from config: $NETWORK_INTERFACE"
-elif [[ -n "$AUTO_INTERFACE" ]]; then
-    log_info "Auto-detected network interface: $AUTO_INTERFACE"
-    NETWORK_INTERFACE="$AUTO_INTERFACE"
-else
-    log_warn "Could not auto-detect network interface"
-    log_info "Available interfaces:"
-    ip -br link show | grep -v "^lo" | awk '{print "  - "$1}'
+    # Check if NETWORK_INTERFACE was provided in config
+    if [[ -n "${NETWORK_INTERFACE:-}" ]]; then
+        log_info "Using network interface from config: $NETWORK_INTERFACE"
+    elif [[ -n "$AUTO_INTERFACE" ]]; then
+        log_info "Auto-detected network interface: $AUTO_INTERFACE"
+        NETWORK_INTERFACE="$AUTO_INTERFACE"
+    else
+        log_warn "Could not auto-detect network interface"
+        log_info "Available interfaces:"
+        ip -br link show | grep -v "^lo" | awk '{print "  - "$1}'
+        echo ""
+
+        # Prompt user to select interface
+        while true; do
+            read -p "Enter the network interface name to use: " NETWORK_INTERFACE
+
+            # Verify the interface exists
+            if ip link show "$NETWORK_INTERFACE" &>/dev/null; then
+                log_info "Selected interface: $NETWORK_INTERFACE"
+                break
+            else
+                log_error "Interface '$NETWORK_INTERFACE' not found. Please try again."
+            fi
+        done
+    fi
+
+    # Final verification
+    if ! ip link show "$NETWORK_INTERFACE" &>/dev/null; then
+        log_error "Network interface '$NETWORK_INTERFACE' does not exist"
+        exit 1
+    fi
+
+    log_info "Network interface confirmed: $NETWORK_INTERFACE"
     echo ""
-    
-    # Prompt user to select interface
-    while true; do
-        read -p "Enter the network interface name to use: " NETWORK_INTERFACE
-        
-        # Verify the interface exists
-        if ip link show "$NETWORK_INTERFACE" &>/dev/null; then
-            log_info "Selected interface: $NETWORK_INTERFACE"
-            break
-        else
-            log_error "Interface '$NETWORK_INTERFACE' not found. Please try again."
-        fi
-    done
+
+    # Set defaults for optional parameters
+    TIMEZONE="${TIMEZONE:-America/New_York}"
+    LOCALE="${LOCALE:-en_US.UTF-8}"
+    KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-fr}"
+else
+    log_info "Minimal mode: skipping network, timezone/locale, and NTP configuration"
 fi
 
-# Final verification
-if ! ip link show "$NETWORK_INTERFACE" &>/dev/null; then
-    log_error "Network interface '$NETWORK_INTERFACE' does not exist"
-    exit 1
-fi
-
-log_info "Network interface confirmed: $NETWORK_INTERFACE"
-echo ""
-
-# Set defaults for optional parameters
-TIMEZONE="${TIMEZONE:-America/New_York}"
-LOCALE="${LOCALE:-en_US.UTF-8}"
-KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-fr}"
 REBOOT_TIME="${REBOOT_TIME:-02:00}"
 
 # Prompt for admin password
@@ -285,6 +305,7 @@ if ! grep -q "127.0.1.1.*$VM_HOSTNAME" /etc/hosts; then
 fi
 log_info "Hostname configured"
 
+if [[ "$MINIMAL_MODE" != true ]]; then
 #############################################
 # 6. CONFIGURE TIMEZONE, LOCALE, KEYBOARD
 #############################################
@@ -309,6 +330,9 @@ BACKSPACE="guess"
 EOF
 log_info "Keyboard layout set to $KEYBOARD_LAYOUT"
 
+fi # end skip timezone/locale/keyboard in minimal mode
+
+if [[ "$MINIMAL_MODE" != true ]]; then
 #############################################
 # 7. CONFIGURE NETWORK (NETPLAN)
 #############################################
@@ -379,6 +403,8 @@ systemctl restart systemd-timesyncd
 systemctl enable systemd-timesyncd
 timedatectl set-ntp true
 log_info "NTP configured with servers: $NTP_SERVERS"
+
+fi # end skip network/NTP in minimal mode
 
 #############################################
 # 9. UPDATE SYSTEM
@@ -592,13 +618,24 @@ if [[ -f /root/deployment-info.txt ]]; then
     log_info "Previous deployment info archived to $DEPLOYMENT_HISTORY_DIR"
 fi
 
+if [[ "$MINIMAL_MODE" == true ]]; then
+    DEPLOY_MODE="Minimal"
+else
+    DEPLOY_MODE="Full"
+fi
+
 cat > /root/deployment-info.txt <<EOF
 ========================================
 VM Deployment Information
 ========================================
 Deployment Date: $(date)
+Deployment Mode: $DEPLOY_MODE
 Hostname: $VM_HOSTNAME
 Admin User: $ADMIN_USER
+EOF
+
+if [[ "$MINIMAL_MODE" != true ]]; then
+cat >> /root/deployment-info.txt <<EOF
 Timezone: $TIMEZONE
 Locale: $LOCALE
 Keyboard: $KEYBOARD_LAYOUT
@@ -611,6 +648,10 @@ Network Configuration:
   IPv6 Gateway: $IPV6_GATEWAY
   DNS: $DNS_SERVERS
   NTP: $NTP_SERVERS
+EOF
+fi
+
+cat >> /root/deployment-info.txt <<EOF
 
 Auto-Update Configuration:
   Enabled: Yes
@@ -636,7 +677,7 @@ log_info "Deployment info saved to /root/deployment-info.txt"
 #############################################
 echo ""
 log_info "========================================="
-log_info "VM Deployment Complete!"
+log_info "VM Deployment Complete! (${DEPLOY_MODE} mode)"
 log_info "========================================="
 log_info "Hostname: $VM_HOSTNAME"
 log_info "Admin user: $ADMIN_USER"
@@ -644,7 +685,9 @@ log_info "SSH access: Key-only (password from console)"
 log_info "Auto-updates: Enabled with reboot at $REBOOT_TIME"
 log_info ""
 log_warn "IMPORTANT: Verify SSH key access before logging out!"
-log_warn "Test connection: ssh $ADMIN_USER@$IPV4_ADDRESS"
+if [[ "$MINIMAL_MODE" != true ]]; then
+    log_warn "Test connection: ssh $ADMIN_USER@$IPV4_ADDRESS"
+fi
 log_info ""
 log_info "Deployment details: /root/deployment-info.txt"
 log_info "Configuration backup: $BACKUP_DIR"

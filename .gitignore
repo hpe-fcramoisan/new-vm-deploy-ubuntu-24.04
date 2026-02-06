@@ -6,5 +6,8 @@ config.conf
 # Brainstorm/working notes
 .brainstorm/
 
+# Claude Code
+CLAUDE.md
+
 # macOS
 .DS_Store

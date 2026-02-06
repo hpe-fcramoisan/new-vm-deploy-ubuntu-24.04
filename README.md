@@ -30,9 +30,9 @@ nano my-vm.conf
 **Required configuration:**
 - Admin user credentials (username: hpn)
 - SSH public key
-- Network settings (IPv4 and IPv6)
-- DNS and NTP servers
 - Hostname
+- Network settings (IPv4 and IPv6) — not required with `--minimal`
+- DNS and NTP servers — not required with `--minimal`
 
 **Note:** 
 - The admin password will be prompted securely during deployment (not stored in config file)
@@ -40,8 +40,11 @@ nano my-vm.conf
 
 ### 3. Deploy VM
 ```bash
-# Run deployment script
+# Full deployment (network, timezone, everything)
 sudo ./vm-deploy.sh -c my-vm.conf
+
+# Minimal deployment (user, hardening, hostname only — skips network/DNS, timezone/locale, NTP)
+sudo ./vm-deploy.sh -c my-vm.conf --minimal
 ```
 
 ### 4. Verify Deployment
